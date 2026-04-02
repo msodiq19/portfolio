@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Muhammed Sodiq — Software Engineer",
+  metadataBase: new URL("https://dmsodiq.xyz"),
+  title: "Sodiq Muhammed — Software Engineer",
   description:
     "Software engineer specializing in systems architecture, security-aware frontend development, and scalable web applications. Based in Lagos, Nigeria.",
   keywords: [
-    "Muhammed Sodiq",
+    "Sodiq Muhammed",
     "Software Engineer",
     "Frontend Developer",
     "React",
@@ -15,17 +17,21 @@ export const metadata: Metadata = {
     "Systems Architecture",
     "Lagos Nigeria",
   ],
-  authors: [{ name: "Muhammed Sodiq" }],
+  authors: [{ name: "Sodiq Muhammed" }],
+  alternates: {
+    canonical: "https://dmsodiq.xyz",
+  },
   openGraph: {
-    title: "Muhammed Sodiq — Software Engineer",
+    title: "Sodiq Muhammed — Software Engineer",
     description:
       "Software engineer specializing in systems architecture, security-aware frontend development, and scalable web applications.",
     type: "website",
     locale: "en_US",
+    url: "https://dmsodiq.xyz",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Muhammed Sodiq — Software Engineer",
+    title: "Sodiq Muhammed — Software Engineer",
     description:
       "Software engineer specializing in systems architecture, security-aware frontend development, and scalable web applications.",
   },
@@ -42,7 +48,29 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>{children}</body>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme') || 'dark';
+                  var resolved = theme;
+                  if (theme === 'system') {
+                    resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  }
+                  document.documentElement.setAttribute('data-theme', resolved);
+                } catch(e) {
+                  document.documentElement.setAttribute('data-theme', 'dark');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body suppressHydrationWarning>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
