@@ -259,13 +259,13 @@ export default function Home() {
               </div>
 
               <div className="hero-socials">
-                <a href={personalInfo.github} target="_blank" rel="noopener noreferrer" className="social-link" title="GitHub">
+                <a href={personalInfo.github} target="_blank" rel="noopener noreferrer" className="social-link" title="GitHub Profile" aria-label="GitHub Profile">
                   <Github size={18} />
                 </a>
-                <a href={personalInfo.linkedin} target="_blank" rel="noopener noreferrer" className="social-link" title="LinkedIn">
+                <a href={personalInfo.linkedin} target="_blank" rel="noopener noreferrer" className="social-link" title="LinkedIn Profile" aria-label="LinkedIn Profile">
                   <Linkedin size={18} />
                 </a>
-                <a href={`mailto:${personalInfo.email}`} className="social-link" title="Email">
+                <a href={`mailto:${personalInfo.email}`} className="social-link" title="Send Email" aria-label="Send Email">
                   <Mail size={18} />
                 </a>
               </div>
@@ -475,6 +475,7 @@ export default function Home() {
                         className="btn btn-ghost"
                         style={{ fontSize: "13px", padding: "9px 18px", background: "rgba(0,0,0,0.5)" }}
                         onClick={(e) => e.stopPropagation()}
+                        aria-label={`View source code for ${project.title}`}
                       >
                         <Github size={14} /> Code
                       </a>
@@ -508,8 +509,9 @@ export default function Home() {
                         rel="noopener noreferrer"
                         className="btn btn-ghost"
                         style={{ fontSize: "13px", padding: "8px 14px", flex: 1, justifyContent: "center" }}
+                        aria-label={`${project.title} source code on GitHub`}
                       >
-                        <Github size={14} /> GitHub
+                        <Github size={14} /> Source
                       </a>
                     )}
                     {project.live && (
@@ -694,9 +696,9 @@ export default function Home() {
             </p>
           </div>
           <div className="footer-links">
-            <a href={personalInfo.github} target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href={personalInfo.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a>
-            <a href={`mailto:${personalInfo.email}`}>Email</a>
+            <a href={personalInfo.github} target="_blank" rel="noopener noreferrer" aria-label="GitHub Profile">GitHub</a>
+            <a href={personalInfo.linkedin} target="_blank" rel="noopener noreferrer" aria-label="LinkedIn Profile">LinkedIn</a>
+            <a href={`mailto:${personalInfo.email}`} aria-label="Send an email">Email</a>
           </div>
         </div>
       </footer>

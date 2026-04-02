@@ -16,6 +16,12 @@
     "react-dom": "19.2.4",
     "react-intersection-observer": "^10.0.3"
   },
+  "browserslist": [
+    "last 1 Chrome version",
+    "last 1 Firefox version",
+    "last 1 Safari version",
+    "last 1 Edge version"
+  ],
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
