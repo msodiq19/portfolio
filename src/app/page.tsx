@@ -159,7 +159,7 @@ export default function Home() {
       <nav className={`nav ${scrolled ? "scrolled" : ""}`}>
         <div className="nav-inner">
           <span className="nav-logo" onClick={() => scrollTo("hero")}>
-            MS.
+            SM.
           </span>
 
           <ul className="nav-links">
@@ -191,7 +191,7 @@ export default function Home() {
             </a>
           </div>
 
-          <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+          <button className={`hamburger ${menuOpen ? "active" : ""}`} onClick={() => setMenuOpen((prev) => !prev)} aria-label={menuOpen ? "Close menu" : "Open menu"}>
             <span /><span /><span />
           </button>
         </div>
@@ -199,13 +199,6 @@ export default function Home() {
 
       {/* ─── MOBILE MENU ─── */}
       <div className={`mobile-menu ${menuOpen ? "open" : ""}`}>
-        <button
-          onClick={() => setMenuOpen(false)}
-          style={{ position: "absolute", top: 24, right: 24, background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer" }}
-          aria-label="Close menu"
-        >
-          <X size={24} />
-        </button>
         {navLinks.map((link) => (
           <a key={link} href={`#${link.toLowerCase()}`} onClick={(e) => { e.preventDefault(); scrollTo(link.toLowerCase()); }}>
             {link}
