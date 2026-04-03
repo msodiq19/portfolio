@@ -173,7 +173,7 @@ export const projects = [
         longDescription:
             "Designed a trust model where the server acts purely as an encrypted storage layer with no access to message content. Features token-based identity (no accounts or sessions) and idempotent release logic to prevent duplicate delivery under failure conditions.",
         tags: ["Next.js", "TypeScript", "Web Crypto API", "AES-GCM", "Zero-Knowledge"],
-        image: null,
+        image: "/last-message.png",
         github: "https://github.com/msodiq19",
         live: "https://last-message.dmsodiq.xyz",
         featured: false,
