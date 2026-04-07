@@ -2,6 +2,7 @@ import { BlogPostMeta } from "@/lib/blog";
 import { BlogCard } from "@/components/blog/BlogCard";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import "@/app/blog.css";
 
 interface LatestPostsProps {
   posts: BlogPostMeta[];
