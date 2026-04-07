@@ -81,6 +81,7 @@ export default function RootLayout({
             `,
           }}
         />
+        <link rel="alternate" type="application/rss+xml" title="Sodiq Muhammed — Blog" href="/feed.xml" />
       </head>
       <body className={inter.className} suppressHydrationWarning>
         <ThemeProvider>{children}</ThemeProvider>

@@ -1,0 +1,451 @@
+---
+title: "What I Stopped Doing in React Projects (and Why My Code Got Better)"
+description: "Lessons from shipping a multi-tenant marketing automation platform with campaigns, conversations, RBAC, and analytics — and keeping it maintainable 6 months later."
+date: "2026-04-06"
+tags: ["React", "TypeScript", "Architecture", "SWR", "Testing"]
+published: true
+image: "/Simestra.jpg"
+---
+
+I spent months building a production React platform that manages campaigns, customer conversations, and permissions across multiple organizations. Somewhere around the third month, I realized the code wasn't getting worse because I was doing too little — it was getting worse because I was doing too much.
+
+Writing maintainable React code isn't about following best practices. It's about knowing which practices to **stop** following.
+
+Here are five things I eliminated, and the measurable improvements that followed.
+
+---
+
+## 1. I Stopped Using Redux for Server State
+
+### Before: 200 Lines of Boilerplate
+
+Every time I needed to fetch data from an API, I wrote code like this:
+
+```typescript
+// 3 action types, 1 action creator, 1 reducer, 2 selectors...
+const FETCH_CAMPAIGNS_REQUEST = "FETCH_CAMPAIGNS_REQUEST";
+const FETCH_CAMPAIGNS_SUCCESS = "FETCH_CAMPAIGNS_SUCCESS";
+const FETCH_CAMPAIGNS_FAILURE = "FETCH_CAMPAIGNS_FAILURE";
+
+export const fetchCampaigns = (page) => async (dispatch) => {
+  dispatch({ type: FETCH_CAMPAIGNS_REQUEST });
+  try {
+    const data = await api.get(`/campaigns?page=${page}`);
+    dispatch({ type: FETCH_CAMPAIGNS_SUCCESS, payload: data });
+  } catch (error) {
+    dispatch({ type: FETCH_CAMPAIGNS_FAILURE, error });
+  }
+};
+
+// ...plus a reducer with 3 cases, selectors, and finally the component:
+function Campaigns() {
+  const dispatch = useDispatch();
+  const campaigns = useSelector(selectCampaigns);
+  const loading = useSelector(selectLoading);
+
+  useEffect(() => {
+    dispatch(fetchCampaigns(page));
+  }, [page]);
+
+  // Now you can render something.
+}
+```
+
+Action types, action creators, a reducer, selectors, a component wiring it all together — **200+ lines just to display a list.**
+
+### After: 15 Lines with SWR
+
+```typescript
+// Hook
+export function useCampaigns(page = 1, limit = 10) {
+  const { isAuthenticated } = useAuth();
+  const key = isAuthenticated ? ["/campaigns", page, limit] : null;
+
+  const { data, error, mutate } = useSWR(key, () =>
+    campaignService.getCampaigns(page, limit)
+  );
+
+  return {
+    campaigns: data?.info ?? [],
+    isLoading: !error && !data,
+    error,
+    mutate,
+  };
+}
+
+// Component
+function Campaigns() {
+  const { campaigns, isLoading } = useCampaigns(page);
+  // That's it. Just render.
+}
+```
+
+### Why This Works
+
+**Redux solves a problem I don't have.** My application doesn't need:
+
+- Time-travel debugging
+- Undo/redo across complex workflows
+- Shared state between 50+ disconnected components
+
+What I _do_ need:
+
+- Automatic caching (SWR handles this)
+- Background revalidation (built-in)
+- Deduplication (two components fetch same data → one request)
+
+**Result**: 85% less code, zero manual cache invalidation.
+
+### When I'd Reconsider
+
+If I built a collaborative editor with operational transforms or a complex state machine, Redux would make sense. But for fetching campaigns and displaying them? SWR wins.
+
+---
+
+## 2. I Stopped Implementing Client-Side Token Refresh
+
+### Before: 300 Lines of Race Condition Hell
+
+The typical client-side token refresh involves an interceptor that catches 401 responses, queues concurrent requests, refreshes the token, and replays everything. In practice, this looked like:
+
+```typescript
+let isRefreshing = false;
+let failedQueue = [];
+
+apiClient.interceptors.response.use(null, async (error) => {
+  if (error.response?.status === 401 && !originalRequest._retry) {
+    if (isRefreshing) {
+      // Queue this request until refresh completes
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      });
+    }
+    isRefreshing = true;
+    // ...refresh token, replay queue, handle errors, clear state
+  }
+});
+```
+
+Even this abbreviated version hints at the complexity. The full implementation was 300+ lines. **Problems I encountered**:
+
+- Concurrent requests triggering multiple refresh attempts
+- Refresh endpoint returning 401 → infinite loop
+- Queue state not clearing on logout
+- Refresh tokens exposed in browser memory (XSS risk)
+
+### After: Backend Handles It, Client Logs Out
+
+```typescript
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      AuthService.clearAuthData();
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+**10 lines. Zero race conditions.**
+
+### Why This Works
+
+**Security**: Refresh tokens live in HTTP-only cookies (JavaScript can't access them). XSS attacks can't steal what they can't see.
+
+**Simplicity**: Backend handles refresh complexity. Client has one job: logout on 401.
+
+### The Tradeoff
+
+Users get logged out after ~15 minutes of inactivity instead of staying logged in forever.
+
+**Is this acceptable?** For my marketing platform, yes. Users check campaigns once a day, spend < 10 minutes per session. The 15-minute token expiry rarely affects them.
+
+**Would I reconsider?** If I built a real-time trading platform or collaborative editor where users stay logged in for hours, I'd implement client-side refresh. But I'd do it knowing the complexity cost.
+
+---
+
+## 3. I Stopped Checking `user.role === 'admin'`
+
+### Before: Role Checks Everywhere
+
+```typescript
+function CampaignList() {
+  const { user } = useAuth();
+  const isAdmin = user.role === "admin";
+  const isManager = user.role === "manager";
+
+  return (
+    <div>
+      {(isAdmin || isManager) && <Button>Create Campaign</Button>}
+      {isAdmin && <Button>Delete Campaign</Button>}
+    </div>
+  );
+}
+```
+
+**What happened when we added a "supervisor" role?**
+
+Updated 40+ components. Every single place that checked `user.role`.
+
+### After: Resource-Action Permissions
+
+```typescript
+function CampaignList() {
+  const { hasPermission } = useAuth();
+
+  const canCreate = hasPermission("campaigns", "create");
+  const canDelete = hasPermission("campaigns", "delete");
+
+  return (
+    <div>
+      {canCreate && <Button>Create Campaign</Button>}
+      {canDelete && <Button>Delete Campaign</Button>}
+    </div>
+  );
+}
+```
+
+**What happened when we added a "supervisor" role?**
+
+Zero client code changes. Backend updated permissions, client adapted automatically.
+
+### Why This Works
+
+**Permissions are data, not logic.** Backend defines what each role can do:
+
+```json
+{
+  "role": "manager",
+  "permissions": {
+    "campaigns": { "view": true, "create": true, "delete": false },
+    "agents": { "view": true, "create": false, "delete": false }
+  }
+}
+```
+
+Client just consumes this. No hardcoded role checks.
+
+### Critical Security Note
+
+<Callout type="warning">
+**Client-side permission checks are UX, not security.**
+
+Hiding a "Delete" button doesn't stop an attacker from calling the API. **Backend must enforce permissions.** Client checks prevent confusion ("Why can't I click this button?"). Server checks prevent unauthorized actions.
+</Callout>
+
+---
+
+## 4. I Stopped Writing Snapshot Tests
+
+### Before: Tests That Break on CSS Changes
+
+```typescript
+it("renders campaign card", () => {
+  const tree = renderer.create(<CampaignCard campaign={mock} />).toJSON();
+  expect(tree).toMatchSnapshot();
+});
+```
+
+**What breaks this test?**
+
+- Changed `<div>` to `<article>`
+- Renamed CSS class
+- Adjusted padding
+- Added a wrapper for layout
+
+**What doesn't break this test?**
+
+- Delete button doesn't call the delete service
+- Form submits with wrong data
+- Permission check is removed
+
+**Snapshot tests fail on implementation changes, not behavior changes.**
+
+### After: Integration Tests That Prove Behavior
+
+```typescript
+it("creates campaign when form is valid", async () => {
+  const createSpy = vi
+    .spyOn(campaignService, "createCampaign")
+    .mockResolvedValue({ status: "OK" });
+
+  render(<CreateCampaignDialog open={true} />);
+
+  await userEvent.type(screen.getByLabelText(/name/i), "Welcome Campaign");
+  await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+  await waitFor(() => {
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Welcome Campaign" })
+    );
+  });
+});
+```
+
+**What breaks this test?**
+
+- Form doesn't call the service
+- Service called with wrong data
+- User can't submit (button disabled incorrectly)
+
+**What doesn't break this test?**
+
+- Changed `<div>` to `<article>`
+- Renamed CSS classes
+- Refactored component structure
+
+### The Philosophy
+
+**Tests should fail when user-facing behavior changes, not when implementation details change.**
+
+I refactored 15 components last month (table → grid layout). Zero test updates needed. Tests stayed green because user behavior didn't change.
+
+---
+
+## 5. I Stopped Putting Business Logic in Hooks
+
+### Before: Logic Scattered in `useEffect`
+
+```typescript
+function useCampaigns(page) {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+
+    // Business logic buried in useEffect
+    fetch(`/api/campaigns?page=${page}`)
+      .then((res) => res.json())
+      .then((data) => {
+        // Response normalization here
+        const normalized = data?.data?.info ?? [];
+        setCampaigns(normalized);
+      })
+      .finally(() => setLoading(false));
+  }, [page]);
+
+  return { campaigns, loading };
+}
+```
+
+**Problems**:
+
+- Can't test response normalization without mounting React
+- Can't reuse fetch logic outside hooks
+- Business rules mixed with React lifecycle
+
+### After: Services Contain Logic, Hooks Coordinate
+
+```typescript
+// services/campaignService.ts (pure TypeScript, no React)
+export async function getCampaigns(page = 1): Promise<Campaign[]> {
+  const resp = await api.get(`/campaigns?page=${page}`);
+  const data = resp?.data?.data ?? { info: [] };
+  return data.info ?? [];
+}
+
+// hooks/useCampaigns.ts (coordination only)
+export function useCampaigns(page = 1) {
+  const { data, error } = useSWR(["/campaigns", page], () =>
+    campaignService.getCampaigns(page)
+  );
+
+  return {
+    campaigns: data ?? [],
+    isLoading: !error && !data,
+    error,
+  };
+}
+```
+
+**Now I can test the service independently**:
+
+```typescript
+// No React needed
+it('normalizes campaign response', async () => {
+  mock.onGet('/campaigns').reply(200, { data: { info: [...] } });
+
+  const result = await getCampaigns(1);
+
+  expect(result).toHaveLength(10);
+  expect(result[0]).toHaveProperty('id');
+});
+```
+
+### Why Separation Matters
+
+When a requirement changed ("support bulk campaign creation"), I:
+
+1. Modified `campaignService.ts` (added `createCampaigns()` function)
+2. Added a hook (`useBulkCreate()`)
+3. Used it in a component
+
+Zero changes to existing components. New feature in 30 minutes.
+
+---
+
+## What Actually Matters
+
+After 6 months in production, here's what improved code quality:
+
+### Not This:
+
+- ❌ Latest framework version
+- ❌ Clever abstractions
+- ❌ 100% test coverage
+- ❌ Trendy state management library
+
+### But This:
+
+- ✅ **Clear boundaries** (services don't import React)
+- ✅ **Explicit contracts** (TypeScript interfaces for all service calls)
+- ✅ **Testable design** (can test logic without mounting components)
+- ✅ **Documented decisions** (ADRs for every significant choice)
+
+---
+
+## The Numbers
+
+| Before                 | After              | Improvement                          |
+| ---------------------- | ------------------ | ------------------------------------ |
+| Redux boilerplate      | SWR hooks          | **85% less code**                    |
+| Client refresh logic   | Backend handles it | **0 race condition bugs**            |
+| Role checks everywhere | Permission service | **0 code changes when adding roles** |
+| Snapshot tests         | Integration tests  | **0 false failures on refactors**    |
+| Logic in hooks         | Logic in services  | **Services testable without React**  |
+
+---
+
+## Try This Tomorrow
+
+Pick **one thing** to stop doing:
+
+1. **If you use Redux for API calls**: Try SWR or React Query for one feature
+2. **If you check `user.role` everywhere**: Implement `hasPermission(resource, action)`
+3. **If you write snapshot tests**: Write one integration test that proves behavior
+4. **If you have logic in `useEffect`**: Extract it to a service file
+
+You don't need to refactor everything. Start with one new feature. See how it feels.
+
+---
+
+## The Full Case Study
+
+This post covers 5 decisions from a larger project. For the complete architecture analysis including:
+
+- Why I separated services from React components
+- How I designed the permission system
+- What testing strategy caught the most bugs
+- The tradeoffs I accepted and why
+
+Read the full case study: [GitHub - Marketing Platform Architecture](https://github.com/msodiq19/marketing-platform-architecture)
+
+All architectural decisions are documented in [ADR format](https://github.com/msodiq19/marketing-platform-architecture/tree/main/ADR) with:
+
+- The problem and alternatives considered
+- Why I chose each approach
+- The tradeoffs accepted
+- When I'd reconsider
